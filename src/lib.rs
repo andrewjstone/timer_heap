@@ -127,7 +127,7 @@ impl<T: Eq + Clone + Hash> TimerHeap<T>  {
     }
 
     /// A deterministically testable version of `expired()`
-    pub fn _expired(&mut self, now: Instant) -> Vec<T> {
+    fn _expired(&mut self, now: Instant) -> Vec<T> {
         let mut expired = Vec::new();
         while let Some(mut popped) = self.timers.pop() {
             if popped.expires_at <= now {

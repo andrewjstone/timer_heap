@@ -1,0 +1,12 @@
+[package]
+name = "timer_heap"
+version = "0.1.0"
+authors = ["Andrew J. Stone <andrew.j.stone.1@gmail.com>"]
+description = "A binary heap based timer management system"
+keywords = ["timer", "heap"]
+license = "Apache-2.0"
+
+[dependencies]
+
+[dev-dependencies]
+assert_matches = "1.0"

@@ -1,5 +1,5 @@
 [![Build
-Status](https://travis-ci.org/andrewjstone/timer_heap.svg?branch=master)](https://travis-ci.org/andrewjstone/amy)
+Status](https://travis-ci.org/andrewjstone/timer_heap.svg?branch=master)](https://travis-ci.org/andrewjstone/timer_heap)
 
 [API Documentation](https://docs.rs/timer_heap)
 

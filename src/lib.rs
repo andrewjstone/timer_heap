@@ -1,3 +1,27 @@
+//! A binary heap based timer system with fast deletes.
+//!
+//! Timers are maintained in a binary heap ordered by expiration time. In order to prevent O(n)
+//! deletes, keys are also stored in an `active` map. A timer is only active when when it exists
+//! in the active map. When a timer is deleted, it is only removed from the active map . When
+//! `expire` is called the key for a timer is only returned if it exists in the active map.
+//!
+//! In order to differentiate multiple adds of the same key, so that when a key is deleted and
+//! re-added all previously non-expired keys don't become active (since they remain in the heap),
+//! each heap entry and active entry is attached to a montonically increasing counter. This ensures
+//! only truly active versions of the same key can be expired.
+//!
+//! In order to provide this fast delete functionality, there is extra cpu overhead from hashmap lookups
+//! during expiry and time_remaining functionality. There is also extra memory usage for the
+//! duplicate keys and monotonic counters maintained in each heap entry and active map value. Note
+//! that when a lot of keys are added and deleted, expiry can become long if those keys are in the
+//! front of the heap and also expired, as they need to be scanned over to get to a valid expired
+//! value. However, this may be fine depending upon use case, as it's possible the keys cancelled
+//! will be evenly distriuted throughout the heap, and we only scan through expiry until we reach a
+//! non-expired time, whether the key is active or not. The tradeoff made for the user is whether
+//! they want to do any scans during deletes in order to save memory and cpu during expiry and
+//! time_remaining functionality.
+//!
+
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
@@ -132,6 +156,7 @@ impl<T: Eq + Clone + Hash> TimerHeap<T>  {
         while let Some(mut popped) = self.timers.pop() {
             if popped.expires_at <= now {
                 if self.active.get(&popped.key) != Some(&popped.counter) {
+                    // Drop an old deleted timer
                     continue;
                 }
                 if popped.recurring {
@@ -141,6 +166,7 @@ impl<T: Eq + Clone + Hash> TimerHeap<T>  {
                     popped.expires_at += popped.duration;
                     self.timers.push(popped);
                 } else {
+                    let _ = self.active.remove(&popped.key);
                     expired.push(popped.key)
                 }
             } else {
@@ -234,6 +260,7 @@ mod tests {
         heap._insert(1u64, duration, TimerType::Oneshot, now).unwrap();
         assert_eq!(heap._expired(now), vec![]);
         let v = heap._expired(now + duration);
+        assert_eq!(heap.active.len(), 0);
         assert_eq!(v.len(), 1);
         assert_eq!(heap.len(), 0);
         assert_eq!(heap._expired(now + duration), vec![]);
@@ -285,6 +312,7 @@ mod tests {
         heap._insert(1u64, duration, TimerType::Oneshot, now + duration).unwrap();
         let v = heap._expired(now + duration + duration);
         assert_eq!(v.len(), 1);
+        assert_eq!(heap.active.len(), 0);
         assert_eq!(heap.len(), 0);
     }
 }

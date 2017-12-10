@@ -113,7 +113,9 @@ impl<T: Eq + Clone + Hash> TimerHeap<T>  {
         self.timers.len()
     }
 
-    /// Insert a TimerEntry into the heap
+    /// Insert a timer into the heap
+    ///
+    /// Return an error if the key already exists.
     pub fn insert(&mut self, key: T, duration: Duration, ty: TimerType) -> Result<(), Error> {
         self._insert(key, duration, ty, Instant::now())
     }
@@ -128,6 +130,17 @@ impl<T: Eq + Clone + Hash> TimerHeap<T>  {
         self.active.insert(key, self.counter);
         self.counter += 1;
         Ok(())
+    }
+
+    /// Insert a timer into the heap, replacing any existing timer if one exists
+    ///
+    /// Return true if a timer already existed in the heap, false otherwise
+    pub fn upsert(&mut self, key: T, duration: Duration, ty: TimerType) -> bool {
+        let entry = TimerEntry::new(key.clone(), duration, ty, Instant::now(), self.counter);
+        self.timers.push(entry);
+        let existed = self.active.insert(key, self.counter).is_some();
+        self.counter += 1;
+        existed
     }
 
     /// Remove a TimerEnry by Id
@@ -330,5 +343,16 @@ mod tests {
         assert_eq!(heap._expired(now + duration + duration).count(), 1);
         assert_eq!(heap.active.len(), 0);
         assert_eq!(heap.len(), 0);
+    }
+
+    #[test]
+    fn upsert() {
+        let mut heap = TimerHeap::new();
+        let duration = Duration::from_millis(500);
+        heap.insert(1u64, duration, TimerType::Oneshot).unwrap();
+        assert_eq!(heap.upsert(1u64, duration, TimerType::Oneshot), true);
+        assert_eq!(heap.remove(1u64), true);
+        assert_eq!(heap.upsert(1u64, duration, TimerType::Oneshot), false);
+        assert_eq!(heap.upsert(1u64, duration, TimerType::Oneshot), true);
     }
 }

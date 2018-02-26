@@ -150,45 +150,36 @@ impl<T: Eq + Clone + Hash> TimerHeap<T>  {
         self.active.remove(&key).is_some()
     }
 
-    /// Return the amount of time remaining (in ms) for the earliest expiring timer
-    /// Return `None` if there are no timers in the heap
-    pub fn time_remaining(&self) -> Option<u64> {
+    /// Return the amount of time remaining for the earliest expiring timer.
+    /// Return `None` if there are no timers in the heap.
+    pub fn time_remaining(&self) -> Option<Duration> {
         self._time_remaining(Instant::now())
     }
 
     /// A deterministically testable version of `time_remaining()`
-    fn _time_remaining(&self, now: Instant) -> Option<u64> {
-        self.timers.iter().find(|e| {
-            self.active.get(&e.key) == Some(&e.counter)
-        }).map(|e| {
-            if now > e.expires_at {
-                return 0;
-            }
-            let duration = e.expires_at - now;
-            // We add a millisecond if there is a fractional ms milliseconds in
-            // duration.subsec_nanos() / 1000000 so that we never fire early.
-            let nanos = duration.subsec_nanos() as u64;
-            // TODO: This can almost certainly be done faster
-            let subsec_ms = nanos / 1000000;
-            let mut remaining = duration.as_secs()*1000 + subsec_ms;
-            if subsec_ms * 1000000 < nanos {
-                remaining += 1;
-            }
-            remaining
-        })
+    fn _time_remaining(&self, now: Instant) -> Option<Duration> {
+        self.timers
+            .iter()
+            .find(|e| self.active.get(&e.key) == Some(&e.counter))
+            .map(|e| {
+                if now > e.expires_at {
+                    return Duration::new(0, 0);
+                }
+                e.expires_at - now
+            })
     }
 
     /// Return the earliest timeout based on a user timeout and the least remaining time in the
     /// next timer to fire.
-    pub fn earliest_timeout(&self, user_timeout_ms: usize) -> usize {
+    pub fn earliest_timeout(&self, user_timeout: Duration) -> Duration {
         if let Some(remaining) = self.time_remaining() {
-            if user_timeout_ms < remaining as usize {
-                user_timeout_ms
+            if user_timeout < remaining {
+                user_timeout
             } else {
-                remaining as usize
+                remaining
             }
         } else {
-            user_timeout_ms
+            user_timeout
         }
     }
 
@@ -272,14 +263,20 @@ mod tests {
         let mut heap = TimerHeap::new();
         let now = Instant::now();
         let duration = Duration::from_millis(500);
-        heap._insert(1u64, duration, TimerType::Oneshot, now).unwrap();
-        assert_matches!(heap._time_remaining(now), Some(500));
-        assert_matches!(heap._time_remaining(now + duration), Some(0));
-        assert_matches!(heap._time_remaining(now + duration + Duration::from_millis(100)),
-                        Some(0));
+        heap._insert(1u64, duration, TimerType::Oneshot, now)
+            .unwrap();
+        assert_eq!(heap._time_remaining(now), Some(Duration::from_millis(500)));
+        assert_eq!(
+            heap._time_remaining(now + duration),
+            Some(Duration::new(0, 0))
+        );
+        assert_eq!(
+            heap._time_remaining(now + duration + Duration::from_millis(100)),
+            Some(Duration::new(0, 0))
+        );
         assert_eq!(heap.remove(2), false);
         assert!(heap.remove(1));
-        assert_matches!(heap._time_remaining(now), None);
+        assert_eq!(heap._time_remaining(now), None);
     }
 
     #[test]

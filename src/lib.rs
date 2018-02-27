@@ -30,6 +30,8 @@ use std::collections::{BinaryHeap, HashMap};
 use std::cmp::{Ordering, Ord, PartialOrd, PartialEq};
 use std::time::{Instant, Duration};
 use std::hash::Hash;
+use std::fmt::{self, Debug};
+use std::convert::From;
 
 #[derive(Debug)]
 pub enum Error {
@@ -64,7 +66,7 @@ impl<'a, T> Iterator for Expired<'a, T> where T: Eq + Clone + Hash {
                 }
                 if popped.recurring {
                     let key = popped.key.clone();
-                    // We use the expired_at time so we don't keep skewing later and later
+                    // We use the expires_at time so we don't keep skewing later and later
                     // by adding the duration to the current time.
                     popped.expires_at += popped.duration;
                     self.heap.timers.push(popped);
@@ -96,6 +98,17 @@ pub struct TimerHeap<T> {
     /// However if we re-add the same key but the old one hasn't expired it will treat both of them
     /// as active. We maintain this counter so that the active set uniquely identifies additions.
     counter: u64
+}
+
+impl<T:Debug + Eq + Clone + Hash + Ord> Debug for TimerHeap<T> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_map()
+           .entries(self.timers
+                        .iter()
+                        .filter(|e| self.is_active(e))
+                        .map(|e| (&e.key, DebugEntry::from(e))))
+           .finish()
+      }
 }
 
 impl<T: Eq + Clone + Hash> TimerHeap<T>  {
@@ -160,7 +173,7 @@ impl<T: Eq + Clone + Hash> TimerHeap<T>  {
     fn _time_remaining(&self, now: Instant) -> Option<Duration> {
         self.timers
             .iter()
-            .find(|e| self.active.get(&e.key) == Some(&e.counter))
+            .find(|e| self.is_active(e))
             .map(|e| {
                 if now > e.expires_at {
                     return Duration::new(0, 0);
@@ -197,6 +210,11 @@ impl<T: Eq + Clone + Hash> TimerHeap<T>  {
             heap: self
         }
     }
+
+    /// Is a given entry still active ?
+    fn is_active(&self, entry: &TimerEntry<T>) -> bool {
+        self.active.get(&entry.key) == Some(&entry.counter)
+    }
 }
 
 #[derive(Eq, Debug)]
@@ -206,6 +224,33 @@ struct TimerEntry<T> {
     expires_at: Instant,
     duration: Duration,
     counter: u64
+}
+
+/// A timer entry used only when debug formatting a TimerHeap
+struct DebugEntry {
+    recurring: bool,
+    expires_at: Instant,
+    duration: Duration,
+}
+
+impl Debug for DebugEntry {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Timer")
+           .field("recurring", &self.recurring)
+           .field("expires_at", &self.expires_at)
+           .field("duration", &self.duration)
+           .finish()
+    }
+}
+
+impl<'a, T> From<&'a TimerEntry<T>> for DebugEntry {
+    fn from(e: &TimerEntry<T>) -> Self {
+        DebugEntry {
+            recurring: e.recurring,
+            expires_at: e.expires_at,
+            duration: e.duration
+        }
+    }
 }
 
 impl<T> TimerEntry<T> {
@@ -258,6 +303,7 @@ mod tests {
     use super::{TimerHeap, TimerType, Error};
     use std::time::{Instant, Duration};
 
+    // Run this test with `cargo test -- --nocapture` to see the debug output
     #[test]
     fn time_remaining() {
         let mut heap = TimerHeap::new();
@@ -265,17 +311,20 @@ mod tests {
         let duration = Duration::from_millis(500);
         heap._insert(1u64, duration, TimerType::Oneshot, now)
             .unwrap();
+        println!("Active Oneshot Timer: {:?}", heap);
         assert_eq!(heap._time_remaining(now), Some(Duration::from_millis(500)));
         assert_eq!(
             heap._time_remaining(now + duration),
             Some(Duration::new(0, 0))
         );
+        println!("Expired Oneshot Timer: {:?}", heap);
         assert_eq!(
             heap._time_remaining(now + duration + Duration::from_millis(100)),
             Some(Duration::new(0, 0))
         );
         assert_eq!(heap.remove(2), false);
         assert!(heap.remove(1));
+        println!("Empty heap: {:?}", heap);
         assert_eq!(heap._time_remaining(now), None);
     }
 

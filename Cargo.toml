@@ -1,6 +1,6 @@
 [package]
 name = "timer_heap"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Andrew J. Stone <andrew.j.stone.1@gmail.com>"]
 description = "A binary heap based timer management system"
 repository = "https://github.com/andrewjstone/timer_heap"
